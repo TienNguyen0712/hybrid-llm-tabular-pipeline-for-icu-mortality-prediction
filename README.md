@@ -1,9 +1,202 @@
+# A Hybrid Framework for ICU Mortality Prediction via Large Language Models 
+
+
+
 > 🇻🇳 [Tiếng Việt](#-tiếng-việt) · 🇬🇧 [English](#-english)
 
 ---
 
 ## 🇬🇧 English
 
+1. [Project Overview & Research Objectives](#1-project-overview--research-objectives)
+   - [1.1 Problem Statement](#11-problem-statement)
+   - [1.2 Research Objectives](#12-research-objectives)
+   - [1.3 Scope & Problem Formulation](#13-scope--problem-formulation)
+2. [Dataset Design & Extraction Methodology (MIMIC-IV)](#2-dataset-design--extraction-methodology-mimic-iv)
+   - [2.1 Patient Cohort Selection Criteria](#21-patient-cohort-selection-criteria)
+     - [Initial Table Join Schema](#initial-table-join-schema)
+   - [2.2 Feature Extraction by Clinical Category](#22-feature-extraction-by-clinical-category)
+     - [A. Bedside Monitoring Data (`chartevents`)](#a-bedside-monitoring-data-chartevents)
+     - [B. Laboratory Test Data (`labevents`)](#b-laboratory-test-data-labevents)
+     - [C. Medical Interventions & Fluid Balance (`inputevents`, `outputevents`, `procedureevents`)](#c-medical-interventions--fluid-balance-inputevents-outputevents-procedureevents)
+   - [2.3 Preprocessing Pipeline & Feature Standardization](#23-preprocessing-pipeline--feature-standardization)
+3. [Automated Feature Generation Architecture via LLM + RAG](#3-automated-feature-generation-architecture-via-llm--rag)
+   - [3.1 Medical Knowledge Integration Workflow](#31-medical-knowledge-integration-workflow)
+   - [3.2 Scope of Complex Feature Generation](#32-scope-of-complex-feature-generation)
+   - [3.3 Automated Code Testing & Validation Mechanism](#33-automated-code-testing--validation-mechanism)
+4. [Feature Selection, Model Training & Explainability](#4-feature-selection-model-training--explainability)
+
+---
+
+## 1. Project Overview & Research Objectives
+
+### 1.1 Problem Statement
+Early identification of mortality risk among patients admitted to the Intensive Care Unit (ICU) is crucial for patient triage, clinical decision support, and medical resource optimization. Traditional machine learning techniques rely heavily on manual feature engineering and selection, which is both time-consuming and demanding for domain experts.
+
+This project proposes a framework that leverages **Large Language Models (LLMs)** combined with **Retrieval-Augmented Generation (RAG)** to automate the extraction, synthesis, and discovery of complex clinical features from heterogeneous electronic health records.
+
+### 1.2 Research Objectives
+- **Automate Feature Engineering:** Utilize LLM + RAG to convert clinical guidelines into clinically meaningful input features.
+- **Optimize Expert Resource Allocation:** Minimize manual labor and clinicians' time commitment during the data preprocessing phase.
+- **Enhance Performance & Interpretability:** Leverage complex composite indicators to improve predictive accuracy while enabling clear traceability of clinical logic.
+
+### 1.3 Scope & Problem Formulation
+- **Dataset Used:** MIMIC-IV (`hosp` and `icu` modules).
+- **Fixed Observation Window:** Extract data recorded strictly within the **first 24 hours** of ICU admission ($t_{\text{intime}} \to t_{\text{intime}} + 24\text{h}$).
+- **Target Label:** In-Hospital Mortality.
+
+[Back to top](#top)
+
+---
+
+## 2. Dataset Design & Extraction Methodology (MIMIC-IV)
+
+The extraction pipeline retrieves data from 9 core tables in MIMIC-IV:
+- `patients`, `admissions`, `icustays`: Administrative data, demographics, and hospital/ICU admission management.
+- `chartevents`, `labevents`: Continuous vital signs and clinical laboratory test results.
+- `prescriptions`, `inputevents`, `outputevents`, `procedureevents`: Medical interventions (medications, fluid balance, bedside procedures).
+
+---
+
+### 2.1 Patient Cohort Selection Criteria
+
+To ensure standardization and prevent data leakage or model degeneration, the selected cohort must satisfy all of the following conditions simultaneously:
+
+1. **Adult Patients:** Age at admission $\ge 18$.
+2. **First ICU Stay:** Include only the first ICU stay per hospital admission to prevent duplicate event bias.
+3. **Length of Stay (LOS):** $\text{LOS} \ge 24\text{h}$.
+4. **Time of Death:** If mortality occurs, the timestamp of death ($\text{deathtime}$) must occur **after the initial 24-hour ICU window** ($\text{deathtime} > t_{\text{intime}} + 24\text{h}$).
+
+> **Clinical Rationale:** Excluding patients who expire within the first 24 hours removes noise caused by extreme physiological volatility right before cardiac arrest and ensures a complete 24-hour window for model learning.
+
+#### Initial Table Join Schema
+
+```
+patients ──(INNER JOIN)── icustays ──(INNER JOIN)── admissions
+└─ Khoá chính: subject_id, hadm_id, stay_id
+```
+
+- **Selected Demographic Variables:** `gender`, `anchor_age`, `anchor_year`, `insurance`, `race`.
+- **Timestamp & Target Variables:** `admittime`, `dischtime`, `intime`, `outtime`, `deathtime`, `hospital_expire_flag` (Primary Target Label).
+
+---
+
+### 2.2 Feature Extraction by Clinical Category
+
+#### A. Bedside Monitoring Data (`chartevents`)
+Extraction of continuous vital signs and clinical assessment scores:
+- **Core Vitals:** Heart Rate, Respiratory Rate, Temperature ($^\circ\text{C}$ / $^\circ\text{F}$), Invasive/Non-Invasive Blood Pressure (Systolic, Diastolic, Mean Arterial Pressure - MAP), $\text{SpO}_2$.
+- **Bedside Gas Exchange & Urgent Metabolic Indicators:** $\text{FiO}_2$, Blood $\text{pH}$, Blood Glucose.
+- **Neurological Assessment:** Glasgow Coma Scale (GCS - Verbal, Motor, Eye).
+- **Anthropometric Data:** Height, Daily Weight / Admission Weight.
+
+#### B. Laboratory Test Data (`labevents`)
+Extraction of central biochemistry, hematology, and arterial blood gas values:
+- **Complete Blood Count (CBC):** Red Blood Cells (RBC), White Blood Cells (WBC), Hemoglobin, Hematocrit, Platelets.
+- **Renal Function & Electrolytes:** Creatinine, Blood Urea Nitrogen (BUN), $\text{Na}^+$, $\text{K}^+$, $\text{Cl}^-$, $\text{HCO}_3^-$, Magnesium, Calcium (Total/Free), Phosphate.
+- **Liver Function:** ALT, AST, Total Bilirubin, Albumin, Alkaline Phosphatase, Total Protein.
+- **Cardiac Biomarkers:** Troponin T, CK-MB, Total CK, NT-proBNP.
+- **Arterial Blood Gas (ABG) & Metabolism:** $\text{pO}_2$, $\text{pCO}_2$, Base Excess, Lactate, Anion Gap.
+- **Endocrine Profile:** TSH, Free T4, T3, Cortisol.
+
+#### C. Medical Interventions & Fluid Balance (`inputevents`, `outputevents`, `procedureevents`)
+- **Fluid Balance:** Total fluid intake volume (`inputevents`), Total urine output volume (`outputevents`).
+- **Vasoactive & Inotropic Agents:** Norepinephrine, Epinephrine, Dopamine, Phenylephrine, Vasopressin.
+- **Invasive Procedures:** Invasive Mechanical Ventilation, Continuous Renal Replacement Therapy (CRRT), Endotracheal Intubation.
+
+---
+
+### 2.3 Preprocessing Pipeline & Feature Standardization
+
+Each time-series indicator within the first 24-hour window is transformed into summary statistics:
+1. **Noise Filtering & Unit Standardization:** Remove physiologically impossible values (outliers) and convert units into standard metrics (e.g., convert $^\circ\text{F} \to ^\circ\text{C}$).
+2. **Summary Statistics Aggregation:** Calculate $\text{Min}$, $\text{Max}$, $\text{Mean}$, $\text{First Value}$ (admission value), and $\text{Last Value}$ (value at the 24-hour mark).
+3. **Dynamic Features (Delta/Slope):**
+   $$\Delta X = \bar{X}_{(12\text{h} \to 24\text{h})} - \bar{X}_{(0\text{h} \to 12\text{h})}$$
+4. **Data Pivoting:** Reshape data structure from long format to wide format corresponding to each `stay_id`.
+
+[Back to top](#top)
+
+---
+
+## 3. Automated Feature Generation Architecture via LLM + RAG
+
+```
+┌────────────────────────┐      ┌───────────────────────────┐
+│ Dynamic Data Schema    │      │ Clinical Guidelines &     │
+│ (MIMIC-IV Columns)     │      │ Scoring Systems Docs      │
+└───────────┬────────────┘      └─────────────┬─────────────┘
+            │                                 │
+            └───────────────┐ ┌───────────────┘
+                            ▼ ▼
+                 ┌───────────────────────┐
+                 │    LLM + RAG Engine   │
+                 └──────────┬────────────┘
+                            │ Generates Python Pandas Code
+                            ▼
+                 ┌───────────────────────┐
+                 │  Code Guardrails Test │
+                 └──────────┬────────────┘
+                            │ Pass?
+                            ▼
+                 ┌───────────────────────┐
+                 │ Joined Feature Matrix │
+                 └───────────────────────┘
+```
+
+### 3.1 Medical Knowledge Integration Workflow
+The Large Language Model (LLM) acts as a "Clinical Feature Engineer." The RAG system ingests domain knowledge from:
+- Clinical practice guidelines and treatment protocols.
+- Standard formulas for scoring ICU severity and prognosis ($SOFA$, $OASIS$, $SAPS\ II$).
+- MIMIC-IV metadata and data dictionaries.
+
+### 3.2 Scope of Complex Feature Generation
+The LLM automatically analyzes clinical domain logic and writes Pandas code to compute advanced feature groups:
+
+1. **Clinical Severity & Prognostic Scores:** Automatically calculates organ failure scores such as $SOFA$ and $SAPS\ II$ based on the initial 24-hour window.
+2. **Medication & Interventions Interaction Indicators:**
+   - `is_on_vasopressor_AND_ventilated`: Binary indicator (0/1) identifying patients requiring both hemodynamic vasopressor support and mechanical ventilation.
+   - `fluid_overload_flag`: Alert flag for fluid overload ($\text{Input} > 3 \times \text{Output}$).
+3. **Advanced Biochemical Composite Features:**
+   - $\text{PaO}_2 / \text{FiO}_2$ Ratio (P/F Ratio for assessing ARDS and acute respiratory failure).
+   - $\text{BUN} / \text{Creatinine}$ Ratio (Differentiates pre-renal from intrinsic acute kidney injury).
+   - Corrected Anion Gap: $\text{Anion Gap} = (\text{Na}^+ + \text{K}^+) - (\text{Cl}^- + \text{HCO}_3^-)$.
+
+### 3.3 Automated Code Testing & Validation Mechanism (Code Guardrails)
+All Python code generated by the LLM must pass through an automated testing pipeline before execution across the entire dataset.
+
+```python
+# System Prompt for Code Generation Quality Control
+PROMPT_TEMPLATE = """
+Based on the following clinical guideline document:
+---
+{CLINICAL_GUIDELINE_DOC}
+---
+Write a Python function using the Pandas library with the following signature:
+`def generate_features(df: pd.DataFrame) -> pd.DataFrame:`
+
+Mandatory technical requirements:
+1. Use ONLY existing columns present in the table schema: {AVAILABLE_COLUMNS}.
+2. Explicitly handle division-by-zero exceptions (ZeroDivisionError) by returning np.nan.
+3. Preserve the exact row count of the input Dataframe (Do NOT use dropna in a way that removes records).
+4. Return a new Dataframe containing ONLY the 'stay_id' column and the newly generated feature columns.
+"""
+```
+
+[Back to top](#top)
+
+---
+
+## 4. Feature Selection, Model Training & Explainability
+1. **Feature Selection:** Integrate hand-crafted baseline features with LLM-generated features. Apply variable filtering methods based on correlation analysis, L1-regularization (Lasso), or Tree-based feature importance to eliminate multicollinearity.
+2. **Predictive Model Training:** Train Gradient Boosting algorithms (XGBoost, LightGBM, CatBoost) on the finalized feature matrix.
+3. **Model Evaluation & Explainability**:
+   - Evaluate model performance using **AUROC** and **AUPRC** (the core benchmark metrics for class-imbalanced medical datasets).
+   - Compute **SHAP** values to analyze the relative predictive contribution of LLM-generated features compared to traditional vital signs.
+
+[Back to top](#top)
+
+---
 
 ## 🇻🇳 Tiếng Việt
 
