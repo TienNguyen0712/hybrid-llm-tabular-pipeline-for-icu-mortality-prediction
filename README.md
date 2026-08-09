@@ -37,6 +37,8 @@ Dự đoán sớm rủi ro tử vong của bệnh nhân khi nhập khoa Hồi s�
 - **Cố định cửa sổ quan sát (Observation Window):** Chỉ trích xuất dữ liệu ghi nhận trong **24 giờ đầu tiên** kể từ thời điểm vào ICU ($t_{\text{intime}} \to t_{\text{intime}} + 24\text{h}$).
 - **Nhãn mục tiêu dự đoán (Target Endpoint):** Tử vong trong đợt nằm viện này (*In-Hospital Mortality*).
 
+[Về trang đầu](#top)
+
 ---
 
 ## 2. Thiết kế Bộ dữ liệu & Phương pháp Trích xuất (MIMIC-IV)
