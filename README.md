@@ -1,4 +1,12 @@
-# MỤC LỤC
+> 🇻🇳 [Tiếng Việt](#-tiếng-việt) · 🇬🇧 [English](#-english)
+
+---
+
+## 🇬🇧 English
+
+
+## 🇻🇳 Tiếng Việt
+
 1. [Tổng quan Đề tài & Mục tiêu Nghiên cứu](#1-tổng-quan-đề-tài--mục-tiêu-nghiên-cứu)
    - [1.1 Đặt vấn đề](#11-đặt-vấn-đề)
    - [1.2 Mục tiêu nghiên cứu](#12-mục-tiêu-nghiên-cứu)
