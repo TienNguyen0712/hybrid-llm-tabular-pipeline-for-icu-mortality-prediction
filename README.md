@@ -14,8 +14,6 @@
    - [3.3 Cơ chế Tự động Kiểm thử & Xác thực Code](#33-cơ-chế-tự-động-kiểm-thử--xác-thực-code)
 4. [Lựa chọn Đặc trưng, Huấn luyện & Giải thích Mô hình](#4-lựa-chọn-đặc-trưng-huấn-luyện--giải-thích-mô-hình)
 
-
-
 ---
 
 # Xây dựng Mô hình Dự đoán Tỷ lệ Tử vong của Bệnh nhân Khoa Hồi sức Tích cực (ICU) Kết hợp Mô hình Ngôn ngữ Lớn
@@ -107,6 +105,8 @@ Mỗi chỉ số theo thời gian (Time-series features) trong cửa sổ 24h đ
    $$\Delta X = \bar{X}_{(12\text{h} \to 24\text{h})} - \bar{X}_{(0\text{h} \to 12\text{h})}$$
 4. **Pivot Data:** Chuyển đổi cấu trúc từ dạng dọc (Long format) sang dạng ngang (Wide format) tương ứng với mỗi `stay_id`.
 
+[Về trang đầu](#top)
+
 ---
 
 ## 3. Kiến trúc Sinh Đặc trưng Tự động bằng LLM + RAG
@@ -173,9 +173,15 @@ Yêu cầu kỹ thuật bắt buộc:
 """
 ```
 
+[Về trang đầu](#top)
+
+---
+
 ## 4. Lựa chọn Đặc trưng, Huấn luyện & Giải thích Mô hình
 1. **Feature Selection:** Tích hợp các đặc trưng thủ công và các đặc trưng do LLM khởi tạo. Sử dụng phương pháp lọc biến dựa trên độ tương quan, L1-regularization (Lasso) hoặc Tree-based feature importance để loại bỏ các biến đa cộng tuyến.
 2. **Huấn luyện Mô hình Dự đoán:** Sử dụng các thuật toán Gradient Boosting (XGBoost, LightGBM, CatBoost) trên bảng dữ liệu cuối cùng.
 3. **Đánh giá & Giải thích Mô hình**:
 - Đánh giá mô hình bằng các chỉ số **AUROC** và **AUPRC** (Chỉ số cốt lõi đối với bài toán lệch pha nhãn - Imbalanced Data trong y tế).
 - Đánh giá giá trị **SHAP** để phân tích mức độ đóng góp của các chỉ số do LLM tự động tạo ra so với các biến sinh hiệu truyền thống.
+
+[Về trang đầu](#top)
