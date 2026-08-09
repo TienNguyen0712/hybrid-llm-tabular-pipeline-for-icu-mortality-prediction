@@ -1,17 +1,20 @@
 # MỤC LỤC
 1. [Tổng quan Đề tài & Mục tiêu Nghiên cứu](#1-tổng-quan-đề-tài--mục-tiêu-nghiên-cứu)
-   - 1.1 Đặt vấn đề
-   - 1.2 Mục tiêu nghiên cứu
-   - 1.3 Phạm vi & Tiêu chí bài toán
+   - [1.1 Đặt vấn đề](#11-đặt-vấn-đề)
+   - [1.2 Mục tiêu nghiên cứu](#12-mục-tiêu-nghiên-cứu)
+   - [1.3 Phạm vi & Tiêu chí bài toán](#13-phạm-vi--tiêu-chí-bài-toán)
 2. [Thiết kế Bộ dữ liệu & Phương pháp Trích xuất (MIMIC-IV)](#2-thiết-kế-bộ-dữ-liệu--phương-pháp-trích-xuất-mimic-iv)
-   - 2.1 Tiêu chí lựa chọn mẫu bệnh nhân (Inclusion/Exclusion Criteria)
-   - 2.2 Trích xuất đặc trưng theo nhóm dữ liệu lâm sàng
-   - 2.3 Quy trình Tiền xử lý & Chuẩn hóa Đặc trưng
-3. [Kiến trúc Sinh Đặc trưng Tự động bằng LLM + RAG](#3-kiến-trúc-sinh-đặc-trưng-tự-động-bằng-llm--rag)
-   - 3.1 Quy trình tích hợp Tri thức Y khoa
-   - 3.2 Phạm vi sinh đặc trưng phức hợp
-   - 3.3 Cơ chế Tự động Kiểm thử & Xác thực Code (Code Guardrails)
+   - [2.1 Tiêu chí lựa chọn mẫu bệnh nhân](#21-tiêu-chí-lựa-chọn-mẫu-bệnh-nhân)
+     - [Sơ đồ kết nối bảng khởi tạo](#sơ-đồ-kết-nối-bảng-khởi-tạo)
+   - [2.2 Trích xuất đặc trưng theo nhóm dữ liệu lâm sàng](#22-trích-xuất-đặc-trưng-theo-nhóm-dữ-liệu-lâm-sàng)
+   - [2.3 Quy trình Tiền xử lý & Chuẩn hóa Đặc trưng](#23-quy-trình-tiền-xử-lý--chuẩn-hóa-đặc-trưng)
+3. [Kiến trúc Sinh Đặc trưng Tự động bằng LLM + RAG](#33-kiến-trúc-sinh-đặc-trưng-tự-động-bằng-llm--rag)
+   - [3.1 Quy trình tích hợp Tri thức Y khoa](#31-quy-trình-tích-hợp-tri-thức-y-khoa)
+   - [3.2 Phạm vi sinh đặc trưng phức hợp](#32-phạm-vi-sinh-đặc-trưng-phức-hợp)
+   - [3.3 Cơ chế Tự động Kiểm thử & Xác thực Code](#33-cơ-chế-tự-động-kiểm-thử--xác-thực-code)
 4. [Lựa chọn Đặc trưng, Huấn luyện & Giải thích Mô hình](#4-lựa-chọn-đặc-trưng-huấn-luyện--giải-thích-mô-hình)
+
+
 
 ---
 
