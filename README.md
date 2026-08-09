@@ -1,57 +1,176 @@
-# Xây dựng một pipeline từ dữ liệu thô cho đến dự đoán tỷ lệ tử vong của bệnh nhân trong khoa ICU
---- 
-## Tổng quan
-
-Đề tài y tế đang là một trong những đề tài nổi bật trong việc ứng dụng các công nghệ kỹ thuật vào. Các bài toán luôn luôn được xuất hiện 
-- Dự đoán thời gian nằm ICU
-- Dự đoán bệnh sốc nhiễm khuẩn
-- Dự đoán shock
-- ...
-
-Một trong số đó chính là bài toán dự đoán tỷ lệ tử vong ở bệnh nhân nằm trong ICU. Ở dự án này cung cấp một quy trình từ dữ liệu thô đến khi đưa ra được dự đoán bằng các mô hình học sâu / học máy 
-- ICU: Là tên viết tắt của hồi sức cấp cứu. Nơi đây có rất nhiều bệnh nhân trong tình trạng nặng có người sông sót có người không. Do đó nhận thấy việc dự đoán tỷ lệ tử vong là rất cần thiết
-  - Một phần cung cấp cái nhìn cho các bác sĩ sử lý
-  - Một phần giảm tỷ lệ các ca bệnh tử vong
-
----
-
-## Bộ dữ liệu 
-
-MIMIC-IV v3.1 là dữ liệu phù hợp bởi khối lượng dữ liệu lớn, nhiều nhiễu cũng như bám sát với dữ liệu ý tế thực tế. Đề tài lựa chọn 2 module chính 
-- hosp: Chứa thông tin lâm sàng của bệnh nhân, thủ tục nhập viện, các chỉ số lâm sàng khi nhập viện cur bệnh nhân 
-- icu: Chứa các thông tin trong phòng nghiên cứu, lab, dịch truyền vào, ra của bệnh nhân khi nàm tại ICU
-
-Đề tài không sử dụng toàn bộ các bảng trong database rộng lớn mà chọn lọc ra 8 bảng chính để chọn lọc đặc trưng cùng với 2 bảng phụ nhằm lấy các chỉ số trong phòng lab cũng như các chỉ số được đo trong phòng ICU
+# MỤC LỤC
+1. [Tổng quan Đề tài & Mục tiêu Nghiên cứu](#1-tổng-quan-đề-tài--mục-tiêu-nghiên-cứu)
+   - 1.1 Đặt vấn đề
+   - 1.2 Mục tiêu nghiên cứu
+   - 1.3 Phạm vi & Tiêu chí bài toán
+2. [Thiết kế Bộ dữ liệu & Phương pháp Trích xuất (MIMIC-IV)](#2-thiết-kế-bộ-dữ-liệu--phương-pháp-trích-xuất-mimic-iv)
+   - 2.1 Tiêu chí lựa chọn mẫu bệnh nhân (Inclusion/Exclusion Criteria)
+   - 2.2 Trích xuất đặc trưng theo nhóm dữ liệu lâm sàng
+   - 2.3 Quy trình Tiền xử lý & Chuẩn hóa Đặc trưng
+3. [Kiến trúc Sinh Đặc trưng Tự động bằng LLM + RAG](#3-kiến-trúc-sinh-đặc-trưng-tự-động-bằng-llm--rag)
+   - 3.1 Quy trình tích hợp Tri thức Y khoa
+   - 3.2 Phạm vi sinh đặc trưng phức hợp
+   - 3.3 Cơ chế Tự động Kiểm thử & Xác thực Code (Code Guardrails)
+4. [Lựa chọn Đặc trưng, Huấn luyện & Giải thích Mô hình](#4-lựa-chọn-đặc-trưng-huấn-luyện--giải-thích-mô-hình)
 
 ---
 
-## Phương pháp đề xuất
+# Xây dựng Mô hình Dự đoán Tỷ lệ Tử vong của Bệnh nhân Khoa Hồi sức Tích cực (ICU) Kết hợp Mô hình Ngôn ngữ Lớn
 
-Để phù hợp với mục tiêu của đề tài. Ta sẽ xây dựng một quy tắc nhằm gia tăng độ chính xác
-- Các bệnh nhân phải trên 18 tuổi (Điều này gia tăng thêm mẫu và có cái nhìn lớn so với người trưởng thành)
-- Lấy bắt đầu từ lần vào ICU đầu tiên (Do 1 bệnh nhân sẽ có rất nhiều lần vào ICU điều này giúp cho mô hình không bị nhiễu)
-- Thời gian nằm ICU phải từ 24h trở đi (Điều này cũng làm gia tăng thêm mẫu)
+## 1. Tổng quan Đề tài & Mục tiêu Nghiên cứu
 
-### Thực hiện chọn lọc đặc trưng cho dữ liệu 
+### 1.1 Đặt vấn đề
+Dự đoán sớm rủi ro tử vong của bệnh nhân khi nhập khoa Hồi sức tích cực (ICU) đóng vai trò then chốt trong việc phân loại bệnh nhân, hỗ trợ ra quyết định lâm sàng và tối ưu hóa nguồn lực y tế. Các kỹ thuật Machine Learning truyền thống đòi hỏi quá trình chọn lọc và xây dựng đặc trưng (Feature Engineering) thủ công, tiêu tốn nhiều thời gian và công sức của bác sĩ y khoa. 
 
-8 bảng được lựa chọn chính bao gồm 
+Đề tài đề xuất giải pháp ứng dụng **Mô hình ngôn ngữ lớn (LLM)** kết hợp với **Hệ thống Truy xuất Tăng cường Tạo mới (RAG)** nhằm tự động hóa quy trình trích xuất, tổng hợp và khai phá các đặc trưng lâm sàng chuyên sâu từ dữ liệu y tế phức tạp.
 
-- icustays: Gồm các thông tin về lượt nằm trong ICU (Đặc trưng cần lấy: `first_careunit`, `intime`, `subject_id`)
-- patients: Gồm các thông tin về bệnh nhân (Đặc trưng cần lấy: `subject_id`, `gender`, `anchor_age`, `anchor_age_group`, `anchor_year`)
-- admissions: Gồm các thông tin về thủ tục nhập viện (Đặc trưng cần lấy: `subject_id`, `hadm_id`, `admittime`, `admission_type`, `admission_location`, `race`, `insurance`, `edregtime`, `edouttime`)
-- labevents: Gồm các thông tin về chỉ số lâm sàng (Đặc trưng cần lấy: `itemid`, `charttime`, `valuenum`, `flag`) - liên kết với bảng `d_label` để chọn ra dặc trưng rồi chuyển thành côt
-- chartevents: Gồm các thông tin về chỉ số lầm sàng tại giường bệnh trong ICU: (Đặc trưng cần lấy: `itemid`, `charttime`, `valuenum`) - liên kết với bảng `d_item` để chọn ra dặc trưng rồi chuyển thành côt
-- prescriptions: Gồm các thông tin về dược lý. Chia theo nhóm dược lý thay cho các tên thuốc thô
-- inputevents / outputevents: Gồm các thông tin về dịch vào và dịch ra của bệnh nhân. Tính cân bằng dịch
+### 1.2 Mục tiêu nghiên cứu
+- **Tự động hóa Feature Engineering:** Dùng LLM + RAG chuyển hóa các hướng dẫn lâm sàng (Clinical Guidelines) thành các đặc trưng đầu vào có ý nghĩa y khoa.
+- **Tối ưu hóa nguồn lực:** Giảm thiểu chi phí nhân công và thời gian tham gia của các chuyên gia y tế trong bước tiền xử lý dữ liệu.
+- **Nâng cao hiệu năng & Tính giải thích:** Khai thác các chỉ số phức hợp giúp cải thiện độ chính xác dự đoán và dễ dàng truy xuất nguồn gốc logic lâm sàng.
 
-### Xử lý đặc trưng thành các thông tin 
-- Dùng các cột đã pivot trong bảng lab và chart tính toán min/max/std/ giá trị đầu tiên và cuối cùng trong 1 bệnh nhân sau những lần đo, delta: biến thiên chỉ số
-- Xử lý missing
-- Tính toán điểm phù hợp
-- Bơm tri thức cho LLM kèm schema chính để trích xuất tạo đặc trưng mới
-- Đánh giá các tri thức đặc trưng sau khi bơm
+### 1.3 Phạm vi & Tiêu chí bài toán
+- **Bộ dữ liệu sử dụng:** MIMIC-IV (phân khúc module `hosp` và `icu`).
+- **Cố định cửa sổ quan sát (Observation Window):** Chỉ trích xuất dữ liệu ghi nhận trong **24 giờ đầu tiên** kể từ thời điểm vào ICU ($t_{\text{intime}} \to t_{\text{intime}} + 24\text{h}$).
+- **Nhãn mục tiêu dự đoán (Target Endpoint):** Tử vong trong đợt nằm viện này (*In-Hospital Mortality*).
 
-### Chọn lọc đặc trưng 
+---
 
-- Sau output của LLM cũng như các chỉ số lâm sàng chọn đăc trưng tạo Matrix cuối cùng -> Thực hiện huấn luyện
+## 2. Thiết kế Bộ dữ liệu & Phương pháp Trích xuất (MIMIC-IV)
 
+Quá trình trích xuất khai thác dữ liệu từ 9 bảng chính của MIMIC-IV:
+- `patients`, `admissions`, `icustays`: Dữ liệu hành chính, nhân khẩu học và quản lý lượt nằm viện/ICU.
+- `chartevents`, `labevents`: Dữ liệu sinh hiệu continuous và kết quả xét nghiệm cận lâm sàng.
+- `prescriptions`, `inputevents`, `outputevents`, `procedureevents`: Dữ liệu can thiệp y tế (dùng thuốc, cân bằng xuất nhập dịch, thủ thuật hồi sức).
+
+---
+
+### 2.1 Tiêu chí lựa chọn mẫu bệnh nhân (Inclusion/Exclusion Criteria)
+
+Để đảm bảo tính chuẩn hóa và tránh suy biến mô hình, mẫu bệnh nhân chọn lọc cần thỏa mãn đồng thời các điều kiện sau:
+
+1. **Người trưởng thành:** Tuổi tại thời điểm nhập viện $\ge 18$.
+2. **Lần vào ICU đầu tiên:** Chỉ lấy lượt nằm ICU đầu tiên (`icustay_seq = 1`) trong đợt nhập viện để tránh trùng lặp biến cố.
+3. **Thời gian nằm ICU (LOS):** $\text{LOS} \ge 24\text{h}$.
+4. **Thời điểm tử vong:** Nếu tử vong, thời điểm tử vong ($\text{deathtime}$) phải diễn ra **sau 24 giờ đầu tiên** ở ICU ($\text{deathtime} > t_{\text{intime}} + 24\text{h}$).
+
+> **Giải thích lâm sàng:** Việc loại trừ bệnh nhân tử vong trong vòng 24 giờ đầu giúp loại bỏ nhiễu do các chỉ số biến động cực đoan ngay trước khi ngưng tim, đồng thời đảm bảo đủ cửa sổ dữ liệu 24h để mô hình học.
+
+#### Sơ đồ kết nối bảng khởi tạo (Cohort Building)
+
+```
+patients ──(INNER JOIN)── icustays ──(INNER JOIN)── admissions
+└─ Khoá chính: subject_id, hadm_id, stay_id
+```
+
+- **Biến nhân khẩu học chọn lọc:** `gender`, `anchor_age`, `anchor_year`, `insurance`, `race`.
+- **Biến mốc thời gian & nhãn:** `admittime`, `dischtime`, `intime`, `outtime`, `deathtime`, `hospital_expire_flag` (Nhãn mục tiêu chính).
+
+---
+
+### 2.2 Trích xuất đặc trưng theo nhóm dữ liệu lâm sàng
+
+#### A. Dữ liệu Theo dõi tại giường (`chartevents`)
+Trích xuất các biến sinh hiệu liên tục và thang điểm theo dõi lâm sàng:
+- **Sinh hiệu cơ bản:** Nhịp tim, Nhịp thở, Nhiệt độ ($^\circ\text{C}$ / $^\circ\text{F}$), Huyết áp xâm lấn/không xâm lấn (Tâm thu, Tâm trương, Trung bình - MAP), $\text{SpO}_2$.
+- **Khí máu & Chuyển hóa khẩn cấp tại giường:** $\text{FiO}_2$, $\text{pH}$ máu, Glucose máu.
+- **Thang điểm tri giác:** Glasgow Coma Scale (GCS - Verbal, Motor, Eye).
+- **Nhân trắc học:** Chiều cao, Cân nặng hàng ngày / Cân nặng nhập viện.
+
+#### B. Dữ liệu Xét nghiệm Cận lâm sàng (`labevents`)
+Trích xuất các chỉ số hóa sinh, huyết học và khí máu trung tâm:
+- **Công thức máu (CBC):** Hồng cầu (RBC), Bạch cầu (WBC), Huyết sắc tố (Hemoglobin), Hematocrit, Tiểu cầu (Platelets).
+- **Chức năng thận & Điện giải:** Creatinine, BUN, $\text{Na}^+$, $\text{K}^+$, $\text{Cl}^-$, $\text{HCO}_3^-$, Magnesium, Calcium (Toàn phần/Tự do), Phosphate.
+- **Chức năng gan:** ALT, AST, Bilirubin toàn phần, Albumin, Alkaline Phosphatase, Protein toàn phần.
+- **Marker tổn thương cơ tim:** Troponin T, CK-MB, CK tổng, NT-proBNP.
+- **Khí máu động mạch (ABG) & Chuyển hóa:** $\text{pO}_2$, $\text{pCO}_2$, Base Excess, Lactate, Anion Gap.
+- **Nội tiết:** TSH, Free T4, T3, Cortisol.
+
+#### C. Can thiệp Y tế & Xuất nhập dịch (`inputevents`, `outputevents`, `procedureevents`)
+- **Cân bằng dịch:** Tổng lượng dịch vào (`inputevents`), Tổng thể tích nước tiểu xuất ra (`outputevents`).
+- **Thuốc vận mạch & Tăng co bóp cơ tim:** Norepinephrine, Epinephrine, Dopamine, Phenylephrine, Vasopressin.
+- **Thủ thuật can thiệp:** Thở máy xâm lấn (Invasive Mechanical Ventilation), Lọc máu liên tục (CRRT), Đặt ống nội khí quản.
+
+---
+
+### 2.3 Quy trình Tiền xử lý & Chuẩn hóa Đặc trưng
+
+Mỗi chỉ số theo thời gian (Time-series features) trong cửa sổ 24h đầu tiên được biến đổi thành các đặc trưng thống kê:
+1. **Lọc nhiễu & Chuẩn hóa đơn vị:** Loại bỏ các giá trị ngoài ngưỡng sinh lý không tưởng (Outliers), quy đổi đơn vị về hệ chuẩn (ví dụ: chuyển $^\circ\text{F} \to ^\circ\text{C}$).
+2. **Biến số Thống kê Tổng hợp (Aggregation):** Tính $\text{Min}$, $\text{Max}$, $\text{Mean}$, $\text{First Value}$ (Giá trị khi vào khoa) và $\text{Last Value}$ (Giá trị tại mốc 24h).
+3. **Biến số Động lực học (Dynamic Features - Delta/Slope):**
+   $$\Delta X = \bar{X}_{(12\text{h} \to 24\text{h})} - \bar{X}_{(0\text{h} \to 12\text{h})}$$
+4. **Pivot Data:** Chuyển đổi cấu trúc từ dạng dọc (Long format) sang dạng ngang (Wide format) tương ứng với mỗi `stay_id`.
+
+---
+
+## 3. Kiến trúc Sinh Đặc trưng Tự động bằng LLM + RAG
+
+```
+┌────────────────────────┐      ┌───────────────────────────┐
+│ Dynamic Data Schema    │      │ Clinical Guidelines &     │
+│ (MIMIC-IV Columns)     │      │ Scoring Systems Docs      │
+└───────────┬────────────┘      └─────────────┬─────────────┘
+            │                                 │
+            └───────────────┐ ┌───────────────┘
+                            ▼ ▼
+                 ┌───────────────────────┐
+                 │    LLM + RAG Engine   │
+                 └──────────┬────────────┘
+                            │ Generates Python Pandas Code
+                            ▼
+                 ┌───────────────────────┐
+                 │  Code Guardrails Test │
+                 └──────────┬────────────┘
+                            │ Pass?
+                            ▼
+                 ┌───────────────────────┐
+                 │ Joined Feature Matrix │
+                 └───────────────────────┘
+```
+
+### 3.1 Quy trình tích hợp Tri thức Y khoa
+Mô hình ngôn ngữ lớn (LLM) đóng vai trò là một "Kỹ sư Đặc trưng Y khoa" (Medical Feature Engineer). Hệ thống RAG nạp dữ liệu tri thức từ:
+- Tài liệu hướng dẫn điều trị lâm sàng (Clinical Practice Guidelines).
+- Công thức tính toán các thang điểm tiên lượng ICU chuẩn ($SOFA$, $OASIS$, $SAPS\ II$).
+- Metadata và Data Dictionary của MIMIC-IV.
+
+### 3.2 Phạm vi sinh đặc trưng phức hợp
+LLM tự động phân tích và viết mã code Pandas để tính toán các nhóm biến nâng cao:
+
+1. **Thang điểm Tiên lượng Lâm sàng:** Tự động tính điểm suy cơ quan $SOFA$, $SAPS\ II$ dựa trên dữ liệu 24h đầu.
+2. **Chỉ số Tương tác Thuốc & Thủ thuật:**
+   - `is_on_vasopressor_AND_ventilated`: Biến nhị进制 (0/1) đánh giá bệnh nhân vừa cần hỗ trợ tuần hoàn vừa cần thở máy.
+   - `fluid_overload_flag`: Cảnh báo quá tải dịch ($\text{Input} > 3 \times \text{Output}$).
+3. **Phức hợp Chỉ số Hóa sinh Chuyên sâu:**
+   - Tỷ lệ $\text{PaO}_2 / \text{FiO}_2$ (Chỉ số P/F đánh giá ARDS/Suy hô hấp).
+   - Tỷ lệ $\text{BUN} / \text{Creatinine}$ (Phân biệt suy thận cấp trước thận và tại thận).
+   - Anion Gap hiệu chỉnh: $\text{Anion Gap} = (\text{Na}^+ + \text{K}^+) - (\text{Cl}^- + \text{HCO}_3^-)$.
+
+### 3.3 Cơ chế Tự động Kiểm thử & Xác thực Code (Code Guardrails)
+Mọi đoạn code do LLM khởi tạo bắt buộc phải đi qua lớp kiểm thử tự động trước khi thực thi trên toàn bộ tập dữ liệu.
+
+```python
+# System Prompt kiểm soát chất lượng sinh mã
+PROMPT_TEMPLATE = """
+Dựa vào tài liệu hướng dẫn lâm sàng dưới đây:
+---
+{CLINICAL_GUIDELINE_DOC}
+---
+Hãy viết một hàm Python bằng thư viện Pandas có định dạng:
+`def generate_features(df: pd.DataFrame) -> pd.DataFrame:`
+
+Yêu cầu kỹ thuật bắt buộc:
+1. Chỉ sử dụng các cột hiện có trong bảng dữ liệu: {AVAILABLE_COLUMNS}.
+2. Xử lý triệt để ngoại lệ chia cho 0 (ZeroDivisionError) bằng cách trả về np.nan.
+3. Bảo toàn số lượng dòng của Dataframe gốc (Không dropna làm mất record).
+4. Trả về Dataframe mới CHỈ chứa cột 'stay_id' và các cột đặc trưng mới vừa sinh ra.
+"""
+```
+
+## 4. Lựa chọn Đặc trưng, Huấn luyện & Giải thích Mô hình
+1. **Feature Selection:** Tích hợp các đặc trưng thủ công và các đặc trưng do LLM khởi tạo. Sử dụng phương pháp lọc biến dựa trên độ tương quan, L1-regularization (Lasso) hoặc Tree-based feature importance để loại bỏ các biến đa cộng tuyến.
+2. **Huấn luyện Mô hình Dự đoán:** Sử dụng các thuật toán Gradient Boosting (XGBoost, LightGBM, CatBoost) trên bảng dữ liệu cuối cùng.
+3. **Đánh giá & Giải thích Mô hình**:
+- Đánh giá mô hình bằng các chỉ số **AUROC** và **AUPRC** (Chỉ số cốt lõi đối với bài toán lệch pha nhãn - Imbalanced Data trong y tế).
+- Đánh giá giá trị **SHAP** để phân tích mức độ đóng góp của các chỉ số do LLM tự động tạo ra so với các biến sinh hiệu truyền thống.
