@@ -27,8 +27,6 @@
 
 ---
 
-# Xây dựng Mô hình Dự đoán Tỷ lệ Tử vong của Bệnh nhân Khoa Hồi sức Tích cực (ICU) Kết hợp Mô hình Ngôn ngữ Lớn
-
 ## 1. Tổng quan Đề tài & Mục tiêu Nghiên cứu
 
 ### 1.1 Đặt vấn đề
