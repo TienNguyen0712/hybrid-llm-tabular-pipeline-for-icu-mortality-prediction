@@ -11,6 +11,10 @@ Bộ dữ liệu sử dụng MIMIC-IV 2 module chính:
 - hosp: Chứa thông tin bệnh nhân, thủ thuật, các lần nằm viện
 - icu: Chứa thông tin lâm sàng trong khoa cấp cứu bệnh viện, dịch ra và dịch vào của bệnh nhân khi nằm trong ICU
 
+Các mục tiêu cần đẩm bảo:
+- **Cố định cửa sổ quan sát:** Chỉ trích xuất dữ liệu ghi nhận trong 24 giờ đầu tiên kể từ thời điểm vào ICU ($t_{\text{intime}} \to t_{\text{intime}} + 24\text{h}$).
+-  **Mục tiêu dự đoán:** In-Hospital Mortality (Tử vong trong đợt nằm viện này)
+
 ---
 
 ## Mô tả kỹ thuật
@@ -36,6 +40,10 @@ Hướng tới mục tiêu của đề tài. Đề xuất các diều kiện sau
 - Các bệnh nhân dược lựa chọn phải là người trường thành (Anchor_age >= 18)
 - Dợt nằm ICU phải là những đợt đàu tiên của bệnh nhân
 - Thời gian nằm viện phải trên 24g kể từ khi vào ICU
+- Bệnh nhân phải có $\text{LOS} \ge 24\text{h}$
+- Thời điểm tử vong ($\text{deathtime}$) phải $> t_{\text{intime}} + 24\text{h}$.
+
+Nếu bệnh nhân tử vong trong vòng 24 giờ đầu, các chỉ số biến động cực đoan trước lúc chết sẽ làm suy biến mô hình.
 
 > Câu hỏi: Có nên lấy hoặc sử dụng cột `anchor_year` với mục đích tính `anchor_age` hay không? Do tuôi trong bảng có giới hạn và muốn tính tuổi thật thì phải dính tới `anchor_year` (`anchor_age` là tuổi mà bệnh nhân khai khi mới vào viện)
 
@@ -86,6 +94,8 @@ Các đặc trưng sau khi lựa chọn xong sẽ được di chuyển qua các 
 - Biến đổi về kiểu dữ liệu phù hợp
 - Chuyển về chung một đơn vị
 - Tính min, max, mean các giá trị thống kê
+- First & Last Value: Giá trị đầu tiên khi vào khoa và giá trị cuối cùng ở mốc 24h.
+- Delta / Slope: Sự thay đổi chỉ số giữa hai nửa cửa sổ quan sát: $$\Delta X = \bar{X}_{(12\text{h} \to 24\text{h})} - \bar{X}_{(0\text{h} \to 12\text{h})}$$
 - Chuyển thành pivot (Đổi các dòng giá trị thành cột)
 
 > Câu hỏi: Có nên gộp chung với bảng điều kiện được xây dựng ở trên để lấy các đặc trưng tương đương hay không ?, Có nên thêm các mốc cảnh báo nhằm sinh đặc trung true/false nếu những vượt quá
@@ -135,9 +145,32 @@ Sau khi đã có các thành phần bảng chính. Ngôn ngữ lớn sẽ thực
 
 Kết hợp cùng kiến trúc RAG. Nó sẽ thực hiện việc tóm tắt -> Chuyển đổi các tài liệu bằng chữ thành một Logic cấu trúc kết hợp với nhận diện lỗi sai tự động chuyển hóa, tính toán đặc trưng mới dựa trên những tài liệu được cung cấp 
 
-```
-PROMPT: Dựa DUY NHẤT vào tài liệu y khoa được cung cấp ở trên, hãy viết hàm Python (Pandas) để tạo các biến phái sinh từ dữ liệu MIMIC. Không tự ý thêm ngưỡng hoặc công thức không có trong tài liệu.
-OUTPUT: LLM sẽ tạo đặc trưng mới dựa theo bảng đã được cung cấp trích xuất từ tài liệu đã cung cấo 
+Phạm vi LLM sinh đặc trưng: 
+- **Tính toán thang điểm tiên lượng lâm sàng:** Truyền tài liệu chuẩn của điểm SOFA, OASIS, hoặc SAPS II qua RAG để LLM sinh code Pandas tính điểm cho từng hệ cơ quan.
+- **Tương tác thuốc & Thủ thuật can thiệp**: Kết hợp `inputevents` và `procedureevents`:
+  - `is_on_vasopressor_AND_ventilated`: Bệnh nhân vừa dùng thuốc vận mạch (Norepinephrine/Dopamine) vừa phải thở máy xâm lấn.
+  - `fluid_overload_flag`: Tổng dịch vào (inputevents) vượt quá 3 lần dịch ra (`outputevents`) trong 24h.
+- **Phức hợp chỉ số tổng hợp**:
+  - Tỷ lệ $\text{PaO}_2 / \text{FiO}_2$ (Chỉ số P/F đánh giá suy hô hấp/ARDS).
+  - Tỷ lệ $\text{BUN} / \text{Creatinine}$ (Phân biệt suy thận cấp trước thận và tại thận).
+  - $\text{Anion Gap} = (\text{Na}^+ + \text{K}^+) - (\text{Cl}^- + \text{HCO}_3^-)$.
+
+Bổ sung lớp tự động kiểm thử cho code do LLM sinh ra trước khi join vào bảng chính:
+
+```python
+# Kiểm thừ 
+PROMPT_TEMPLATE = """
+Dựa vào hướng dẫn lâm sàng dưới đây:
+---
+{CLINICAL_GUIDELINE_DOC}
+---
+Hãy viết một hàm Python bằng Pandas có chữ ký: `def generate_features(df: pd.DataFrame) -> pd.DataFrame:`
+Yêu cầu bắt buộc:
+1. Chỉ sử dụng các cột sẵn có: {AVAILABLE_COLUMNS}.
+2. Xử lý triệt để trường hợp chia cho 0 (ZeroDivisionError) bằng np.nan.
+3. Không làm thay đổi số lượng dòng của dataframe gốc.
+4. Trả về dataframe chỉ chứa các cột đặc trưng mới sinh ra.
+"""
 ```
 
 Sau khi mô hình ngôn ngữ lớn thực hiện nhiệm vụ của mình ta sẽ có một dữ liệu mới 
