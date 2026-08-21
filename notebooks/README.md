@@ -76,9 +76,12 @@ def get_patient_level_splits(df: pd.DataFrame, n_splits: int = 5):
     # Chia nhóm dựa trên PatientID để đảm bảo bệnh nhân không xuất hiện ở cả Train và Val
     for train_idx, val_idx in gkf.split(df, df["Outcome"], groups=df["PatientID"]):
         yield train_idx, val_idx
+```
 Bảng checklist hạn chế rủi ro cho bài nghiên cứu
-Rủi ro Y khoa / AI	Hiện trạng Notebook	Giải pháp khắc phục
-Data Leakage (LOS)	Cột LOS_hours có trong cohort	Xóa bỏ LOS_hours khỏi tập đặc trưng X.
-Data Leakage (Splitting)	Chưa chia tập Train/Test	Chia theo PatientID dùng GroupKFold hoặc GroupShuffleSplit.
-Imbalance Class Bias	Mortality Rate ≈4.39%	Sử dụng AUCPR (PR-AUC) làm metric chính thay vì AUROC hay Accuracy.
-Missingness Bias	Tỷ lệ khuyết cao ở các chỉ số	Tạo cột cờ báo thiếu (is_missing) trước khi fill missing value.
+
+| Rủi ro Y khoa / AI | Hiện trạng Notebook | Giải pháp khắc phục |
+| :--- | :--- | :--- |
+| **Data Leakage (LOS)** | Cột `LOS_hours` có trong cohort | **Xóa bỏ** `LOS_hours` khỏi tập đặc trưng $X$. |
+| **Data Leakage (Splitting)** | Chưa chia tập Train/Test | Chia theo `PatientID` dùng `GroupKFold` hoặc `GroupShuffleSplit`. |
+| **Imbalance Class Bias** | Mortality Rate $\approx 4.39\%$ | Sử dụng `AUCPR` (PR-AUC) làm metric chính thay vì `AUROC` hay `Accuracy`. |
+| **Missingness Bias** | Tỷ lệ khuyết cao ở các chỉ số | Tạo cột cờ báo thiếu (`is_missing`) trước khi fill missing value. |
